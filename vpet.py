@@ -2,114 +2,196 @@ import sys
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt, QTimer, QPoint
+import os
 
 class PixelPet(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.SubWindow)
+        print("初始化 PixelPet...")
+        
+        # 修改窗口标志
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool
+        )
+        
+        # 设置窗口背景透明
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         
-        # 加载动画帧
-        self.idle_images = ["idle1.png", "idle2.png"]  # 站立动画
-        self.walk_images = ["walk1.png", "walk2.png", "walk3.png"]  # 走路动画
-        self.click_images = ["shock1.png", "shock2.png"]  # 点击动画
+        # 添加图片存在性检查
+        self.idle_images = ["idle1.png", "idle2.png"]
+        self.walk_images = ["walk1.png", "walk2.png", "walk3.png"]
+        self.click_images = ["shock1.png", "shock2.png"]
+        
+        print(f"当前工作目录: {os.getcwd()}")
+        
+        # 验证所有图片文件是否存在
+        all_images = self.idle_images + self.walk_images + self.click_images + ["bubble.png"]
+        for img in all_images:
+            full_path = os.path.join(os.getcwd(), img)
+            if not os.path.exists(full_path):
+                print(f"错误：找不到图片文件 {full_path}")
+                sys.exit(1)
+            else:
+                print(f"找到图片文件: {full_path}")
+        
         self.current_frame = 0
-        self.state = "idle"  # 初始状态
+        self.state = "idle"
         
+        print("创建标签...")
         self.label = QLabel(self)
-        self.update_image()
+        self.label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
-        self.resize(self.label.pixmap().size())
+        # 确保初始图片加载成功
+        initial_pixmap = QPixmap(self.idle_images[0])
+        if initial_pixmap.isNull():
+            print("错误：无法加载初始图片")
+            sys.exit(1)
+        else:
+            print(f"成功加载初始图片，尺寸: {initial_pixmap.width()}x{initial_pixmap.height()}")
+            
+        self.label.setPixmap(initial_pixmap)
+        self.resize(initial_pixmap.size())
         
-        # 定时器：控制站立动画
+        # 设置窗口尺寸策略
+        self.label.adjustSize()
+        self.adjustSize()
+        
+        # 设置初始位置在屏幕中央
+        screen = QApplication.primaryScreen().geometry()
+        center_pos = screen.center() - self.rect().center()
+        self.move(center_pos)
+        print(f"窗口位置设置为: x={center_pos.x()}, y={center_pos.y()}")
+        
+        # 确保窗口可见
+        self.raise_()
+        self.show()
+        print(f"窗口是否可见: {self.isVisible()}")
+        print(f"窗口大小: {self.width()}x{self.height()}")
+        
+        # 站立动画计时器
         self.idle_timer = QTimer(self)
         self.idle_timer.timeout.connect(self.animate_idle)
-        self.idle_timer.start(1000)  # 每 1 秒变换一次
+        self.idle_timer.start(500)
         
-        # 定时器：控制点击动画恢复
+        # 走路动画计时器 - 设置为500毫秒
+        self.walk_timer = QTimer(self)
+        self.walk_timer.timeout.connect(self.animate_walk)
+        self.walk_timer.setInterval(200)  # 每500毫秒更新一次走路动画
+        
+        # 点击恢复计时器
         self.click_timer = QTimer(self)
         self.click_timer.setSingleShot(True)
         self.click_timer.timeout.connect(self.restore_idle)
         
-        # 定时器：每小时弹出对话框
+        # 气泡计时器
         self.bubble_timer = QTimer(self)
         self.bubble_timer.timeout.connect(self.show_bubble)
-        self.bubble_timer.start(3600000)  # 每小时提醒
+        self.bubble_timer.start(3600000)
         
-        self.dragging = False  # 记录是否在拖拽
+        # 上次移动的时间戳
+        self.last_move_time = 0
+        
+        self.dragging = False
         self.offset = QPoint()
-    
-    def update_image(self):
-        """更新宠物的图片"""
-        if self.state == "idle":
-            pixmap = QPixmap(self.idle_images[self.current_frame])
-        elif self.state == "walk":
-            pixmap = QPixmap(self.walk_images[self.current_frame])
-        elif self.state == "click":
-            pixmap = QPixmap(self.click_images[self.current_frame])
-        else:
-            pixmap = QPixmap(self.idle_images[0])
         
-        self.label.setPixmap(pixmap)
-        self.resize(pixmap.size())
+        print("初始化完成")
+
+    def update_image(self):
+        print(f"更新图片 - 当前状态: {self.state}, 帧: {self.current_frame}")
+        current_images = {
+            "idle": self.idle_images,
+            "walk": self.walk_images,
+            "click": self.click_images
+        }
+
+        if self.state in current_images:
+            images = current_images[self.state]
+            if self.current_frame < len(images):
+                pixmap = QPixmap(images[self.current_frame])
+
+                if not pixmap.isNull():
+                    scaled_pixmap = pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio)  # 这里的 64x64 可以调整
+                    self.label.setPixmap(scaled_pixmap)
+                    self.resize(scaled_pixmap.size())
+                    self.label.adjustSize()
+                    self.adjustSize()
+                    print(f"图片更新成功: {images[self.current_frame]}")
+                else:
+                    print(f"错误：无法加载图片 {images[self.current_frame]}")
+
     
     def animate_idle(self):
-        """站立动画"""
         if self.state == "idle":
             self.current_frame = (self.current_frame + 1) % len(self.idle_images)
             self.update_image()
     
     def animate_walk(self):
-        """走路动画"""
         if self.state == "walk":
             self.current_frame = (self.current_frame + 1) % len(self.walk_images)
             self.update_image()
     
     def mousePressEvent(self, event):
-        """鼠标点击事件，触发特殊动作"""
         if event.button() == Qt.MouseButton.LeftButton:
             self.dragging = True
             self.offset = event.position().toPoint()
             
-            # 播放点击动画
             self.state = "click"
             self.current_frame = 0
             self.update_image()
-            self.click_timer.start(300)  # 300ms 后恢复
+            self.click_timer.start(300)
     
     def mouseMoveEvent(self, event):
-        """鼠标拖动事件，移动桌宠并播放走路动画"""
         if self.dragging:
-            self.state = "walk"
-            self.animate_walk()
+            # 切换到走路状态
+            if self.state != "walk":
+                self.state = "walk"
+                self.current_frame = 0
+                self.update_image()
+                # 启动走路动画计时器
+                if not self.walk_timer.isActive():
+                    self.walk_timer.start()
+            
+            # 移动窗口
             self.move(event.globalPosition().toPoint() - self.offset)
     
     def mouseReleaseEvent(self, event):
-        """释放鼠标时停止拖拽，恢复站立状态"""
         if event.button() == Qt.MouseButton.LeftButton:
             self.dragging = False
+            
+            # 停止走路动画计时器
+            if self.walk_timer.isActive():
+                self.walk_timer.stop()
+            
             self.state = "idle"
             self.current_frame = 0
             self.update_image()
     
     def restore_idle(self):
-        """恢复站立状态"""
         self.state = "idle"
         self.current_frame = 0
         self.update_image()
     
     def show_bubble(self):
-        """弹出提醒对话框"""
-        self.bubble_label = QLabel(self)
-        self.bubble_label.setPixmap(QPixmap("bubble.png"))
-        self.bubble_label.move(self.width() + 10, 0)  # 让气泡出现在宠物旁边
-        self.bubble_label.show()
-        
-        # 3 秒后自动隐藏气泡
-        QTimer.singleShot(3000, self.bubble_label.hide)
+        if hasattr(self, "bubble_label") and self.bubble_label.isVisible():
+            return
+
+        bubble_pixmap = QPixmap("bubble.png")
+        if not bubble_pixmap.isNull():
+            self.bubble_label = QLabel(self)
+            self.bubble_label.setPixmap(bubble_pixmap)
+            self.bubble_label.move(self.width() + 10, 0)
+            self.bubble_label.show()
+            QTimer.singleShot(3000, self.bubble_label.hide)
+        else:
+            print("错误：无法加载气泡图片")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    print("创建 QApplication 实例")
+    
     pet = PixelPet()
-    pet.show()
+    print("正在进入事件循环...")
     sys.exit(app.exec())
