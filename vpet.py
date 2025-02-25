@@ -21,8 +21,8 @@ class PixelPet(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         
         # 添加图片存在性检查
-        self.idle_images = ["idle1.png", "idle2.png"]
-        self.walk_images = ["walk1.png", "walk2.png", "walk3.png"]
+        self.idle_images = ["idle1.png", "idle3.png", "idle1.png", "idle2.png"]
+        self.walk_images = ["walk1.png", "walk2.png", "walk3.png", "walk2.png"]
         self.click_images = ["shock1.png", "shock2.png"]
         
         print(f"当前工作目录: {os.getcwd()}")
@@ -39,6 +39,9 @@ class PixelPet(QWidget):
         
         self.current_frame = 0
         self.state = "idle"
+        
+        self.idle_counter = 0
+        self.idle_durations = [20, 5, 20, 1]  
         
         print("创建标签...")
         self.label = QLabel(self)
@@ -74,7 +77,7 @@ class PixelPet(QWidget):
         # 站立动画计时器
         self.idle_timer = QTimer(self)
         self.idle_timer.timeout.connect(self.animate_idle)
-        self.idle_timer.start(500)
+        self.idle_timer.start(100)
         
         # 走路动画计时器 - 设置为500毫秒
         self.walk_timer = QTimer(self)
@@ -110,10 +113,14 @@ class PixelPet(QWidget):
         if self.state in current_images:
             images = current_images[self.state]
             if self.current_frame < len(images):
+                # 先清除当前图像
+                self.label.clear()
+                
                 pixmap = QPixmap(images[self.current_frame])
 
                 if not pixmap.isNull():
-                    scaled_pixmap = pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio)  # 这里的 64x64 可以调整
+                    # 确保图像有透明背景
+                    scaled_pixmap = pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio)
                     self.label.setPixmap(scaled_pixmap)
                     self.resize(scaled_pixmap.size())
                     self.label.adjustSize()
@@ -122,11 +129,14 @@ class PixelPet(QWidget):
                 else:
                     print(f"错误：无法加载图片 {images[self.current_frame]}")
 
-    
     def animate_idle(self):
         if self.state == "idle":
-            self.current_frame = (self.current_frame + 1) % len(self.idle_images)
-            self.update_image()
+            self.idle_counter += 1
+            # 检查当前帧是否应该切换
+            if self.idle_counter >= self.idle_durations[self.current_frame]:
+                self.idle_counter = 0
+                self.current_frame = (self.current_frame + 1) % len(self.idle_images)
+                self.update_image()
     
     def animate_walk(self):
         if self.state == "walk":
@@ -167,11 +177,13 @@ class PixelPet(QWidget):
             
             self.state = "idle"
             self.current_frame = 0
+            self.idle_counter = 0  # 重置 idle 计数器
             self.update_image()
     
     def restore_idle(self):
         self.state = "idle"
         self.current_frame = 0
+        self.idle_counter = 0  # 重置 idle 计数器
         self.update_image()
     
     def show_bubble(self):
